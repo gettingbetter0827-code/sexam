@@ -1,0 +1,6 @@
+{
+  "name": "고사계 양식 도우미",
+  "description": "학사 일정(학년도·학기·고사명·시험일)과 시간표 자료(엑셀·PDF)를 기반으로 고사 운영 계획서, 가정통신문, 고사 원안 등 한글(hwpx) 고사계 공문 양식을 자동으로 변환·생성하는 도우미 웹 애플리케이션",
+  "permissions": [],
+  "capabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
