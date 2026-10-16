@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Field, Template, TTData } from '../types';
 import {
   ALIGN,
@@ -28,37 +28,50 @@ const esc = (s: any) =>
 
 export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ template, fields, tt }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
+    const box = containerRef.current;
+    if (!box) return;
+
+    box.innerHTML =
+      '<div class="docwrap"><div class="hint p-6 text-center text-muted">문서 미리보기를 불러오는 중…</div></div>';
 
     const render = async () => {
-      setLoading(true);
-      setError(null);
       try {
         const { docs, changed } = transform(template, fields, tt);
         template.styles = template.styles || headerStyles(template.cache.header);
         const img = await templateImages(template);
 
-        if (!active || !containerRef.current) return;
+        if (!active || !box || !document.body.contains(box)) return;
 
         const html = renderDocHTML(docs, template.styles, img, changed);
-        containerRef.current.innerHTML = `<div class="docwrap"><div class="docscale">${html}</div></div>`;
-        paginate(containerRef.current);
-        fitDoc(containerRef.current);
+        box.innerHTML = `<div class="docwrap"><div class="docscale">${html}</div></div>`;
+        paginate(box);
+        fitDoc(box);
+
+        // Schedule another fitDoc after layout paints
+        requestAnimationFrame(() => {
+          if (active && box && document.body.contains(box)) {
+            fitDoc(box);
+          }
+        });
       } catch (err: any) {
-        if (active) setError(err.message || '문서를 렌더링하지 못했습니다.');
-      } finally {
-        if (active) setLoading(false);
+        console.error('Error rendering document preview:', err);
+        if (active && box) {
+          box.innerHTML = `<div class="docwrap"><div class="hint p-6 text-center text-red-500">${esc(
+            err.message || '문서 미리보기를 생성하지 못했습니다.'
+          )}</div></div>`;
+        }
       }
     };
 
     render();
 
     const handleResize = () => {
-      if (containerRef.current) fitDoc(containerRef.current);
+      if (box && document.body.contains(box)) {
+        fitDoc(box);
+      }
     };
     window.addEventListener('resize', handleResize);
 
@@ -68,20 +81,7 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ template, fiel
     };
   }, [template, fields, tt]);
 
-  return (
-    <div ref={containerRef} className="docv">
-      {loading && (
-        <div className="docwrap">
-          <div className="hint p-6 text-center text-muted">문서 미리보기를 생성하는 중…</div>
-        </div>
-      )}
-      {error && (
-        <div className="docwrap">
-          <div className="hint p-6 text-center text-red-500">{error}</div>
-        </div>
-      )}
-    </div>
-  );
+  return <div ref={containerRef} className="docv w-full" />;
 };
 
 function renderDocHTML(
@@ -262,8 +262,8 @@ function renderDocHTML(
         Rm = g('right') || 5669,
         T = g('top') || 4252,
         B = g('bottom') || 4252,
-        HD = g('header'),
-        FT = g('footer');
+        HD = g('header') || 0,
+        FT = g('footer') || 0;
       const bodyW = W - L - Rm,
         bodyH = H - T - B - HD - FT;
 
@@ -388,12 +388,16 @@ function paginate(box: HTMLElement) {
 function fitDoc(box: HTMLElement) {
   const wrap = box.querySelector('.docwrap') as HTMLElement;
   if (!wrap) return;
-  const avail = wrap.clientWidth - 48;
+  const avail = wrap.clientWidth - 32;
+  if (avail < 50) return;
   for (const pg of Array.from(box.querySelectorAll('.hpage')) as HTMLElement[]) {
     (pg.style as any).zoom = '';
-    const k = Math.min(1, avail / pg.offsetWidth);
-    if (k < 1) {
-      (pg.style as any).zoom = k.toFixed(3);
+    const w = pg.offsetWidth;
+    if (w > 0) {
+      const k = Math.min(1, Math.max(0.1, avail / w));
+      if (k < 1) {
+        (pg.style as any).zoom = k.toFixed(3);
+      }
     }
   }
 }

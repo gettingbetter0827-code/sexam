@@ -147,6 +147,9 @@ export const App: React.FC = () => {
       }
 
       if (active) {
+        if (loadedTemplates.length > 0 && !loadedTemplates.some((t) => t.pick)) {
+          loadedTemplates[0].pick = true;
+        }
         setTemplates(loadedTemplates);
         setSources(loadedSources);
         if (loadedSources.length > 0) setViewSrc(true);
@@ -495,6 +498,13 @@ export const App: React.FC = () => {
                   </div>
                 ))}
               </div>
+            </section>
+          )}
+
+          {pickedTemplates.length === 0 && !showTTCard && (
+            <section className="panel p-8 text-center text-muted">
+              <p className="font-semibold text-sm mb-1 text-ink">선택된 양식이 없습니다</p>
+              <p className="text-xs">위 양식 목록에서 문서를 클릭하여 선택하면 실시간 문서 미리보기와 HWPX 파일 생성이 활성화됩니다.</p>
             </section>
           )}
         </main>

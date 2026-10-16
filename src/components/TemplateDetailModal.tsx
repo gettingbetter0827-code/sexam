@@ -1,6 +1,18 @@
 import React, { useState, useMemo } from 'react';
 import { Field, Rule, Source, Template } from '../types';
-import { cellsOf, cellText, childEls, outName, parseXml, rid, suggest, topTables } from '../utils/hwpx';
+import {
+  cellsOf,
+  cellText,
+  childEl,
+  childEls,
+  closest,
+  outName,
+  paraNodes,
+  parseXml,
+  rid,
+  suggest,
+  topTables,
+} from '../utils/hwpx';
 import { dateOptions, expand, ruleOut } from '../utils/tokens';
 import { bestOffset, fillTable, hwpCells } from '../utils/sheetPdf';
 import { transform } from '../utils/timetable';
@@ -472,24 +484,27 @@ export const TemplateDetailModal: React.FC<TemplateDetailModalProps> = ({
               </div>
 
               <div className="preview bg-sunk p-4 rounded-xl max-h-[60vh] overflow-y-auto">
-                <div className="page bg-white text-black p-8 rounded shadow max-w-2xl mx-auto text-xs leading-relaxed font-serif">
-                  {template.cache.sections.map((sec, si) => {
-                    const doc = parseXml(sec.xml);
-                    const root = doc.documentElement;
-                    return (
-                      <div key={si} className="mb-6">
-                        {childEls(root, 'p').map((p, pi) => {
-                          const txt = cellText({ sub: p as any });
-                          return (
-                            <p key={pi} className="mb-1 min-h-[1em] whitespace-pre-wrap">
-                              {txt || '\u200B'}
-                            </p>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
+                <div
+                  id="page"
+                  className="page bg-white text-black p-8 rounded shadow max-w-2xl mx-auto text-xs leading-relaxed font-serif select-text"
+                  dangerouslySetInnerHTML={{
+                    __html: (() => {
+                      try {
+                        const { docs, changed } = transform(template, fields, null);
+                        return docs
+                          .map((d) => {
+                            const root = d.doc.documentElement;
+                            return childEls(root, 'p')
+                              .map((p) => paraHtml(p, changed))
+                              .join('');
+                          })
+                          .join('<hr class="my-6 border-dashed border-gray-300">');
+                      } catch (e: any) {
+                        return `<p class="text-red-500">${esc(e.message)}</p>`;
+                      }
+                    })(),
+                  }}
+                />
               </div>
             </div>
           )}
@@ -536,3 +551,37 @@ function parseTSV(s: string): string[][] {
   rows.push(row);
   return rows;
 }
+
+const esc = (s: any) =>
+  String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] || c));
+
+function paraHtml(p: Element, changed: Set<Element>): string {
+  const own = [...p.getElementsByTagNameNS('*', 't')].filter((t) => closest(t, 'p') === p);
+  const txt = paraNodes(own).map((n) => n.nodeValue).join('');
+  const tbls = [...p.getElementsByTagNameNS('*', 'tbl')].filter((t) => closest(t, 'p') === p);
+  let h = '';
+  if (txt || !tbls.length) {
+    h += `<p class="mb-1 min-h-[1.2em] whitespace-pre-wrap">${
+      changed.has(p) ? `<span class="bg-amber-100 text-amber-950 px-1 rounded font-semibold">${esc(txt)}</span>` : esc(txt)
+    }</p>`;
+  }
+  for (const t of tbls) {
+    h += '<table class="w-full border-collapse my-2 text-xs border border-gray-400">';
+    for (const tr of childEls(t, 'tr')) {
+      h += '<tr>';
+      for (const tc of childEls(tr, 'tc')) {
+        const sp = childEl(tc, 'cellSpan');
+        const sub = childEl(tc, 'subList');
+        const rs = sp?.getAttribute('rowSpan') || '1';
+        const cs = sp?.getAttribute('colSpan') || '1';
+        h += `<td rowspan="${rs}" colspan="${cs}" class="border border-gray-400 p-1 align-top">${
+          sub ? childEls(sub, 'p').map((q) => paraHtml(q, changed)).join('') : ''
+        }</td>`;
+      }
+      h += '</tr>';
+    }
+    h += '</table>';
+  }
+  return h;
+}
+
